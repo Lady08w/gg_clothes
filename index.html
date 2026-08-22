@@ -586,10 +586,6 @@
       <div class="nav-logo"></div>
       <div class="nav-cats" id="navCats">
         <button class="cat-btn active" data-cat="Todos">Todos</button>
-        <button class="cat-btn" data-cat="Ropa">Ropa</button>
-        <button class="cat-btn" data-cat="Calzado">Calzado</button>
-        <button class="cat-btn" data-cat="Accesorios">Accesorios</button>
-        <button class="cat-btn" data-cat="Otros">Otros</button>
       </div>
       <div class="search-wrap">
         <input class="search-input" id="searchInput" type="text" placeholder="Buscar...">
@@ -776,16 +772,33 @@ function showBanner(html){
   document.getElementById('configBanner').style.display = 'block';
 }
 
+// Construye los botones de categoría a partir de lo que realmente hay en la
+// hoja — así cualquier categoría nueva que agregues en Sheets aparece sola,
+// sin tener que tocar el código. "Otros" siempre queda de último como cajón
+// de sastre. Solo se llama una vez, justo después de cargar los productos.
+function renderCategoryNav(){
+  const nav = document.getElementById('navCats');
+  const cats = [...new Set(PRODUCTS.map(p => p.categoria).filter(Boolean))];
+  cats.sort((a, b) => a.localeCompare(b, 'es'));
+  const otrosIdx = cats.indexOf('Otros');
+  if(otrosIdx > -1){ cats.splice(otrosIdx, 1); cats.push('Otros'); }
+  nav.innerHTML = '<button class="cat-btn active" data-cat="Todos">Todos</button>' +
+    cats.map(c => `<button class="cat-btn" data-cat="${c}">${c}</button>`).join('');
+  ACTIVE_CAT = 'Todos';
+}
+
 async function loadProducts(){
   if(!CONFIG.SHEET_ID){
     showBanner('⚠ El catálogo aún no está conectado a una Google Sheet — estás viendo datos de ejemplo. Configura <code>CONFIG.SHEET_ID</code> al final de <code>index.html</code>. Ver <code>README.md</code>.');
     PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    renderCategoryNav();
     render();
     return;
   }
   if(location.protocol === 'file:'){
     showBanner('⚠ Estás abriendo este archivo directamente desde tu computador (doble clic). Por seguridad, el navegador bloquea que una página abierta así pida datos a Google — por eso ves datos de ejemplo y no las fotos reales. Sube la carpeta a <a href="https://app.netlify.com/drop" target="_blank" rel="noopener">Netlify Drop</a> (gratis, sin cuenta) y ábrelo desde el link que te dé — ahí sí se conecta en vivo con la Google Sheet.');
     PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    renderCategoryNav();
     render();
     return;
   }
@@ -796,11 +809,13 @@ async function loadProducts(){
     const text = await res.text();
     const rows = parseGvizJson(text).map(normalizeRow);
     PRODUCTS = rows.filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    renderCategoryNav();
     render();
   }catch(err){
     console.error('Error cargando Google Sheet, usando datos de ejemplo:', err);
     showBanner('⚠ No se pudo leer la Google Sheet configurada (revisa que esté compartida como "Cualquiera con el enlace: Lector" y que el ID/nombre de pestaña en <code>CONFIG</code> sean correctos). Mientras tanto, estás viendo datos de ejemplo.');
     PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    renderCategoryNav();
     render();
   }
 }

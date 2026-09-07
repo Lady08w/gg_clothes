@@ -29,6 +29,8 @@
     --holo-7:#EEF2F1;
     --holo-grad: linear-gradient(115deg, var(--holo-1), var(--holo-2), var(--holo-3), var(--holo-4), var(--holo-5), var(--holo-6), var(--holo-7), var(--holo-1));
     --radius: 18px;
+    --price-strike:#B983FF;
+    --discount-badge:#7A2CE0;
   }
 
   *{box-sizing:border-box; margin:0; padding:0;}
@@ -362,6 +364,18 @@
     backdrop-filter:blur(6px);
   }
   .badge.condicion-2nd{ color:#f8ff3d; border-color:rgba(248,255,61,0.3); }
+  .discount-badge{
+    position:absolute;
+    top:10px; right:10px;
+    background:linear-gradient(135deg, var(--discount-badge), #C24DFF);
+    color:#fff;
+    font-family:'Archivo Black', sans-serif;
+    font-size:11.5px;
+    letter-spacing:0.4px;
+    padding:5px 10px;
+    border-radius:999px;
+    box-shadow:0 2px 10px rgba(122,44,224,0.55);
+  }
 
   .card-body{
     padding:14px 16px 16px;
@@ -384,7 +398,7 @@
   .card-meta{
     display:flex;
     justify-content:space-between;
-    align-items:center;
+    align-items:flex-end;
     margin-top:8px;
   }
   .card-size{
@@ -394,9 +408,33 @@
     padding:3px 9px;
     border-radius:999px;
   }
+  .price-block{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    line-height:1.25;
+  }
+  .price-old{
+    font-size:12px;
+    color:var(--price-strike);
+    text-decoration:line-through;
+  }
   .card-price{
     font-family:'Archivo Black', sans-serif;
     font-size:15px;
+  }
+  .card-price.price-discounted{ color:var(--holo-3); }
+
+  .modal-price-block{
+    display:flex;
+    align-items:baseline;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .modal-price-old{
+    font-size:16px;
+    color:var(--price-strike);
+    text-decoration:line-through;
   }
 
   .empty-state{
@@ -556,18 +594,6 @@
   @media (max-width:600px){
     .wa-float{ right:16px; bottom:16px; width:54px; height:54px; }
     .wa-float svg{ width:27px; height:27px; }
-
-    main{ padding:22px 12px 70px; }
-    .grid{
-      grid-template-columns:repeat(2, 1fr);
-      gap:12px;
-    }
-    .card-body{ padding:10px 10px 12px; gap:3px; }
-    .card-brand{ font-size:9.5px; letter-spacing:1px; }
-    .card-name{ font-size:12.5px; }
-    .card-size{ font-size:10.5px; padding:2px 7px; }
-    .card-price{ font-size:12.5px; }
-    .badge{ font-size:9px; padding:3px 7px; top:8px; left:8px; }
   }
 </style>
 </head>
@@ -586,6 +612,10 @@
       <div class="nav-logo"></div>
       <div class="nav-cats" id="navCats">
         <button class="cat-btn active" data-cat="Todos">Todos</button>
+        <button class="cat-btn" data-cat="Ropa">Ropa</button>
+        <button class="cat-btn" data-cat="Calzado">Calzado</button>
+        <button class="cat-btn" data-cat="Accesorios">Accesorios</button>
+        <button class="cat-btn" data-cat="Otros">Otros</button>
       </div>
       <div class="search-wrap">
         <input class="search-input" id="searchInput" type="text" placeholder="Buscar...">
@@ -652,7 +682,7 @@ const CONFIG = {
 
 // Datos de ejemplo usados solo si CONFIG.SHEET_ID está vacío o falla la conexión.
 const SAMPLE_DATA = [
-  {publicar:'ok', marca:'Adidas', producto:'Gorra MH negra rojo', categoria:'Accesorios', tipo:'Gorra', condicion:'2nd Hand', talla:'L', precio:100000, fotos:[]},
+  {publicar:'ok', marca:'Adidas', producto:'Gorra MH negra rojo', categoria:'Accesorios', tipo:'Gorra', condicion:'2nd Hand', talla:'L', precio:80000, precioAntes:100000, fotos:[]},
   {publicar:'ok', marca:'Adidas', producto:'Gorra Beige Originals', categoria:'Accesorios', tipo:'Gorra', condicion:'Nuevo', talla:'Ajustable', precio:160000, fotos:[]},
   {publicar:'ok', marca:'Adidas', producto:'Poncho Adidas', categoria:'Ropa', tipo:'Poncho', condicion:'2nd Hand', talla:'Única', precio:220000, fotos:[]},
   {publicar:'ok', marca:'Asics', producto:'Duomax Gel Azul/Blanco/Rojo', categoria:'Calzado', tipo:'Tenis', condicion:'', talla:'8.5 US', precio:350000, fotos:[]},
@@ -740,6 +770,7 @@ function normalizeRow(raw){
       condicion: raw.condicion || '',
       talla: raw.talla || '',
       precio: Number(raw.precio) || 0,
+      precioAntes: Number(raw.precioAntes) || 0,
       fotos: (raw.fotos || []).map(driveUrlToImage).filter(Boolean),
     };
   }
@@ -755,8 +786,18 @@ function normalizeRow(raw){
     condicion: raw['Condicion'] || '',
     talla: raw['Talla'] || '',
     precio: Number(raw['Precio']) || 0,
+    precioAntes: Number(raw['Precio Antes']) || 0,
     fotos,
   };
+}
+
+// Devuelve info de descuento si "Precio Antes" está lleno y es mayor que el precio actual.
+function getDiscount(p){
+  if(p.precioAntes && p.precioAntes > p.precio){
+    const pct = Math.round((1 - p.precio / p.precioAntes) * 100);
+    return { active: true, original: p.precioAntes, pct };
+  }
+  return { active: false };
 }
 
 function formatPrice(n){
@@ -772,33 +813,16 @@ function showBanner(html){
   document.getElementById('configBanner').style.display = 'block';
 }
 
-// Construye los botones de categoría a partir de lo que realmente hay en la
-// hoja — así cualquier categoría nueva que agregues en Sheets aparece sola,
-// sin tener que tocar el código. "Otros" siempre queda de último como cajón
-// de sastre. Solo se llama una vez, justo después de cargar los productos.
-function renderCategoryNav(){
-  const nav = document.getElementById('navCats');
-  const cats = [...new Set(PRODUCTS.map(p => p.categoria).filter(Boolean))];
-  cats.sort((a, b) => a.localeCompare(b, 'es'));
-  const otrosIdx = cats.indexOf('Otros');
-  if(otrosIdx > -1){ cats.splice(otrosIdx, 1); cats.push('Otros'); }
-  nav.innerHTML = '<button class="cat-btn active" data-cat="Todos">Todos</button>' +
-    cats.map(c => `<button class="cat-btn" data-cat="${c}">${c}</button>`).join('');
-  ACTIVE_CAT = 'Todos';
-}
-
 async function loadProducts(){
   if(!CONFIG.SHEET_ID){
     showBanner('⚠ El catálogo aún no está conectado a una Google Sheet — estás viendo datos de ejemplo. Configura <code>CONFIG.SHEET_ID</code> al final de <code>index.html</code>. Ver <code>README.md</code>.');
     PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
-    renderCategoryNav();
     render();
     return;
   }
   if(location.protocol === 'file:'){
     showBanner('⚠ Estás abriendo este archivo directamente desde tu computador (doble clic). Por seguridad, el navegador bloquea que una página abierta así pida datos a Google — por eso ves datos de ejemplo y no las fotos reales. Sube la carpeta a <a href="https://app.netlify.com/drop" target="_blank" rel="noopener">Netlify Drop</a> (gratis, sin cuenta) y ábrelo desde el link que te dé — ahí sí se conecta en vivo con la Google Sheet.');
     PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
-    renderCategoryNav();
     render();
     return;
   }
@@ -809,13 +833,11 @@ async function loadProducts(){
     const text = await res.text();
     const rows = parseGvizJson(text).map(normalizeRow);
     PRODUCTS = rows.filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
-    renderCategoryNav();
     render();
   }catch(err){
     console.error('Error cargando Google Sheet, usando datos de ejemplo:', err);
     showBanner('⚠ No se pudo leer la Google Sheet configurada (revisa que esté compartida como "Cualquiera con el enlace: Lector" y que el ID/nombre de pestaña en <code>CONFIG</code> sean correctos). Mientras tanto, estás viendo datos de ejemplo.');
     PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
-    renderCategoryNav();
     render();
   }
 }
@@ -844,6 +866,7 @@ function render(){
     const cover = p.fotos[0];
     const coverSrc = cover ? cover.src : placeholderImage(p.producto);
     const coverFallback = cover ? (cover.fallback || '') : '';
+    const discount = getDiscount(p);
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
@@ -852,13 +875,17 @@ function render(){
         <div class="card-media">
           <img src="${coverSrc}" alt="${p.producto}" loading="lazy" data-fallback="${coverFallback}" data-placeholder="${placeholderImage(p.producto)}" onerror="window.__imgFallback(this)">
           ${p.categoria ? `<span class="badge">${p.categoria}</span>` : ''}
+          ${discount.active ? `<span class="discount-badge">-${discount.pct}%</span>` : ''}
         </div>
         <div class="card-body">
           <div class="card-brand">${p.marca}</div>
           <div class="card-name">${p.producto}</div>
           <div class="card-meta">
             <span class="card-size">${p.talla || '—'}</span>
-            <span class="card-price">${formatPrice(p.precio)}</span>
+            <div class="price-block">
+              ${discount.active ? `<span class="price-old">${formatPrice(discount.original)}</span>` : ''}
+              <span class="card-price${discount.active ? ' price-discounted' : ''}">${formatPrice(p.precio)}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -871,9 +898,12 @@ function render(){
 function openModal(p){
   const photos = p.fotos.length ? p.fotos : [{ src: placeholderImage(p.producto), fallback: null }];
   GALLERY = { photos, placeholder: placeholderImage(p.producto), index: 0 };
+  const discount = getDiscount(p);
   document.getElementById('modalBrand').textContent = p.marca;
   document.getElementById('modalName').textContent = p.producto;
-  document.getElementById('modalPrice').textContent = formatPrice(p.precio);
+  document.getElementById('modalPrice').innerHTML = discount.active
+    ? `<div class="modal-price-block"><span class="modal-price-old">${formatPrice(discount.original)}</span><span>${formatPrice(p.precio)}</span><span class="discount-badge" style="position:static;">-${discount.pct}%</span></div>`
+    : formatPrice(p.precio);
   const tags = document.getElementById('modalTags');
   tags.innerHTML = '';
   [p.categoria, p.tipo, p.talla, p.condicion].filter(Boolean).forEach(t => {

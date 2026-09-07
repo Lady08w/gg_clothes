@@ -682,7 +682,7 @@ const CONFIG = {
 
 // Datos de ejemplo usados solo si CONFIG.SHEET_ID está vacío o falla la conexión.
 const SAMPLE_DATA = [
-  {publicar:'ok', marca:'Adidas', producto:'Gorra MH negra rojo', categoria:'Accesorios', tipo:'Gorra', condicion:'2nd Hand', talla:'L', precio:80000, precioAntes:100000, fotos:[]},
+  {publicar:'ok', marca:'Adidas', producto:'Gorra MH negra rojo', categoria:'Accesorios', tipo:'Gorra', condicion:'2nd Hand', talla:'L', precio:100000, precioDescuento:80000, fotos:[]},
   {publicar:'ok', marca:'Adidas', producto:'Gorra Beige Originals', categoria:'Accesorios', tipo:'Gorra', condicion:'Nuevo', talla:'Ajustable', precio:160000, fotos:[]},
   {publicar:'ok', marca:'Adidas', producto:'Poncho Adidas', categoria:'Ropa', tipo:'Poncho', condicion:'2nd Hand', talla:'Única', precio:220000, fotos:[]},
   {publicar:'ok', marca:'Asics', producto:'Duomax Gel Azul/Blanco/Rojo', categoria:'Calzado', tipo:'Tenis', condicion:'', talla:'8.5 US', precio:350000, fotos:[]},
@@ -770,7 +770,7 @@ function normalizeRow(raw){
       condicion: raw.condicion || '',
       talla: raw.talla || '',
       precio: Number(raw.precio) || 0,
-      precioAntes: Number(raw.precioAntes) || 0,
+      precioDescuento: Number(raw.precioDescuento) || 0,
       fotos: (raw.fotos || []).map(driveUrlToImage).filter(Boolean),
     };
   }
@@ -786,16 +786,18 @@ function normalizeRow(raw){
     condicion: raw['Condicion'] || '',
     talla: raw['Talla'] || '',
     precio: Number(raw['Precio']) || 0,
-    precioAntes: Number(raw['Precio Antes']) || 0,
+    precioDescuento: Number(raw['Precio con Descuento']) || 0,
     fotos,
   };
 }
 
-// Devuelve info de descuento si "Precio Antes" está lleno y es mayor que el precio actual.
+// Devuelve info de descuento si "Precio con Descuento" está lleno y es menor que el Precio normal.
+// "Precio" siempre es el precio de referencia (tachado si hay descuento); "Precio con Descuento"
+// es el precio rebajado que se muestra como precio principal.
 function getDiscount(p){
-  if(p.precioAntes && p.precioAntes > p.precio){
-    const pct = Math.round((1 - p.precio / p.precioAntes) * 100);
-    return { active: true, original: p.precioAntes, pct };
+  if(p.precioDescuento && p.precioDescuento > 0 && p.precioDescuento < p.precio){
+    const pct = Math.round((1 - p.precioDescuento / p.precio) * 100);
+    return { active: true, original: p.precio, discounted: p.precioDescuento, pct };
   }
   return { active: false };
 }
@@ -884,7 +886,7 @@ function render(){
             <span class="card-size">${p.talla || '—'}</span>
             <div class="price-block">
               ${discount.active ? `<span class="price-old">${formatPrice(discount.original)}</span>` : ''}
-              <span class="card-price${discount.active ? ' price-discounted' : ''}">${formatPrice(p.precio)}</span>
+              <span class="card-price${discount.active ? ' price-discounted' : ''}">${formatPrice(discount.active ? discount.discounted : p.precio)}</span>
             </div>
           </div>
         </div>
@@ -902,7 +904,7 @@ function openModal(p){
   document.getElementById('modalBrand').textContent = p.marca;
   document.getElementById('modalName').textContent = p.producto;
   document.getElementById('modalPrice').innerHTML = discount.active
-    ? `<div class="modal-price-block"><span class="modal-price-old">${formatPrice(discount.original)}</span><span>${formatPrice(p.precio)}</span><span class="discount-badge" style="position:static;">-${discount.pct}%</span></div>`
+    ? `<div class="modal-price-block"><span class="modal-price-old">${formatPrice(discount.original)}</span><span>${formatPrice(discount.discounted)}</span><span class="discount-badge" style="position:static;">-${discount.pct}%</span></div>`
     : formatPrice(p.precio);
   const tags = document.getElementById('modalTags');
   tags.innerHTML = '';

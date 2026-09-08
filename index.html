@@ -519,7 +519,53 @@
   }
   .gallery-dots span.active{ background:var(--holo-3); }
 
-  .modal-info{
+  /* ---------- outfits carousel ---------- */
+  .outfits-section{ max-width:1240px; margin:0 auto; padding:34px 22px 90px; }
+  .carousel{
+    position:relative;
+    max-width:520px;
+    margin:0 auto;
+  }
+  .carousel-viewport{
+    position:relative;
+    border-radius:var(--radius);
+    overflow:hidden;
+    aspect-ratio:4/5;
+    background:#000;
+    border:1.5px solid transparent;
+    background-clip:padding-box;
+  }
+  .carousel-viewport::before{
+    content:"";
+    position:absolute; inset:0;
+    padding:1.5px;
+    border-radius:var(--radius);
+    background:var(--holo-grad);
+    background-size:300% 300%;
+    animation:holoShift 5s ease-in-out infinite;
+    -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite:xor;
+    mask-composite:exclude;
+    pointer-events:none;
+    z-index:2;
+  }
+  .carousel-viewport img{
+    width:100%; height:100%;
+    object-fit:cover;
+    display:block;
+    transition:opacity .35s ease;
+  }
+  .carousel-caption{
+    position:absolute;
+    left:0; right:0; bottom:0;
+    padding:34px 18px 18px;
+    background:linear-gradient(to top, rgba(0,0,0,0.75), transparent);
+    color:var(--text);
+    font-size:13px;
+    text-align:center;
+  }
+  .carousel .gallery-dots{ bottom:-26px; }
+  .carousel .gallery-nav{ z-index:3; }
     padding:30px 28px;
     display:flex;
     flex-direction:column;
@@ -616,6 +662,7 @@
         <button class="cat-btn" data-cat="Calzado">Calzado</button>
         <button class="cat-btn" data-cat="Accesorios">Accesorios</button>
         <button class="cat-btn" data-cat="Otros">Otros</button>
+        <button class="cat-btn" data-cat="Outfits">Outfits</button>
       </div>
       <div class="search-wrap">
         <input class="search-input" id="searchInput" type="text" placeholder="Buscar...">
@@ -635,6 +682,23 @@
     <div class="grid" id="grid"></div>
     <div class="empty-state" id="emptyState" style="display:none;">No hay productos en esta categoría todavía.</div>
   </main>
+
+  <section id="outfits" class="outfits-section" style="display:none;">
+    <div class="section-head">
+      <h2>Outfits</h2>
+      <span class="count-pill" id="outfitsCountPill"></span>
+    </div>
+    <div class="carousel" id="outfitsCarousel">
+      <div class="carousel-viewport">
+        <img id="outfitsImg" src="" alt="Outfit">
+        <div class="carousel-caption" id="outfitsCaption"></div>
+      </div>
+      <div class="gallery-nav gallery-prev" id="outfitsPrev">‹</div>
+      <div class="gallery-nav gallery-next" id="outfitsNext">›</div>
+      <div class="gallery-dots" id="outfitsDots"></div>
+    </div>
+    <div class="empty-state" id="outfitsEmpty" style="display:none;">Todavía no hay fotos de outfits.</div>
+  </section>
 
   <footer>© <span id="year"></span> — Catálogo hecho con Google Sheets</footer>
 
@@ -678,6 +742,7 @@ const CONFIG = {
   SHEET_NAME: 'Inventario',                        // <-- nombre de la pestaña
   WHATSAPP_NUMBER: '573143693205',                 // <-- número de WhatsApp, solo dígitos, con código de país (sin +, sin espacios)
   WHATSAPP_MESSAGE: 'Hola! Vi el catálogo de GG Clothing y quiero más información 🙂',
+  OUTFITS_SHEET_NAME: 'Outfits',                   // <-- nombre de la pestaña de fotos de outfits
 };
 
 // Datos de ejemplo usados solo si CONFIG.SHEET_ID está vacío o falla la conexión.
@@ -966,6 +1031,18 @@ document.getElementById('navCats').addEventListener('click', (e) => {
   if(!btn) return;
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+
+  if(btn.dataset.cat === 'Outfits'){
+    document.getElementById('catalogo').style.display = 'none';
+    document.getElementById('searchInput').closest('.search-wrap').style.display = 'none';
+    document.getElementById('outfits').style.display = 'block';
+    startOutfitsAutoplay();
+    return;
+  }
+  document.getElementById('outfits').style.display = 'none';
+  stopOutfitsAutoplay();
+  document.getElementById('searchInput').closest('.search-wrap').style.display = '';
+  document.getElementById('catalogo').style.display = '';
   ACTIVE_CAT = btn.dataset.cat;
   render();
 });
@@ -980,7 +1057,111 @@ if(CONFIG.WHATSAPP_NUMBER){
   wa.style.display = 'flex';
 }
 
+/* ============================================================
+   OUTFITS — carrusel de fotos de gente usando la ropa.
+   Se lee de la pestaña "Outfits" de la misma Google Sheet
+   (columnas: Publicar, Foto, Descripcion).
+   ============================================================ */
+let OUTFITS = [];
+let outfitIndex = 0;
+let outfitsTimer = null;
+
+async function loadOutfits(){
+  if(!CONFIG.SHEET_ID) return;
+  try{
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CONFIG.OUTFITS_SHEET_NAME || 'Outfits')}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('No se pudo leer la hoja de Outfits (' + res.status + ')');
+    const text = await res.text();
+    const rows = parseGvizJson(text);
+    OUTFITS = rows
+      .filter(r => String(r['Publicar'] || '').trim().toLowerCase() === 'ok')
+      .map(r => {
+        const img = driveUrlToImage(r['Foto']);
+        if(!img) return null;
+        return { src: img.src, fallback: img.fallback, caption: r['Descripcion'] || '' };
+      })
+      .filter(Boolean);
+  }catch(err){
+    console.error('Error cargando Outfits, sección oculta hasta que la hoja tenga la pestaña:', err);
+    OUTFITS = [];
+  }
+  renderOutfitSlide();
+}
+
+function renderOutfitSlide(){
+  const empty = document.getElementById('outfitsEmpty');
+  const carousel = document.getElementById('outfitsCarousel');
+  document.getElementById('outfitsCountPill').textContent = OUTFITS.length ? (OUTFITS.length + (OUTFITS.length === 1 ? ' foto' : ' fotos')) : '';
+  if(OUTFITS.length === 0){
+    empty.style.display = 'block';
+    carousel.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  carousel.style.display = 'block';
+  if(outfitIndex >= OUTFITS.length) outfitIndex = 0;
+  const cur = OUTFITS[outfitIndex];
+  const img = document.getElementById('outfitsImg');
+  img.src = cur.src;
+  img.dataset.fallback = cur.fallback || '';
+  img.dataset.placeholder = cur.src;
+  img.onerror = () => window.__imgFallback(img);
+  document.getElementById('outfitsCaption').textContent = cur.caption || '';
+  document.getElementById('outfitsCaption').style.display = cur.caption ? 'block' : 'none';
+
+  const dots = document.getElementById('outfitsDots');
+  dots.innerHTML = '';
+  OUTFITS.forEach((_, i) => {
+    const d = document.createElement('span');
+    if(i === outfitIndex) d.className = 'active';
+    dots.appendChild(d);
+  });
+  const showNav = OUTFITS.length > 1;
+  document.getElementById('outfitsPrev').style.display = showNav ? 'flex' : 'none';
+  document.getElementById('outfitsNext').style.display = showNav ? 'flex' : 'none';
+}
+
+function nextOutfit(){
+  if(OUTFITS.length === 0) return;
+  outfitIndex = (outfitIndex + 1) % OUTFITS.length;
+  renderOutfitSlide();
+}
+function prevOutfit(){
+  if(OUTFITS.length === 0) return;
+  outfitIndex = (outfitIndex - 1 + OUTFITS.length) % OUTFITS.length;
+  renderOutfitSlide();
+}
+function startOutfitsAutoplay(){
+  stopOutfitsAutoplay();
+  if(OUTFITS.length > 1){
+    outfitsTimer = setInterval(nextOutfit, 4000);
+  }
+}
+function stopOutfitsAutoplay(){
+  if(outfitsTimer){ clearInterval(outfitsTimer); outfitsTimer = null; }
+}
+
+document.getElementById('outfitsPrev').addEventListener('click', () => { prevOutfit(); startOutfitsAutoplay(); });
+document.getElementById('outfitsNext').addEventListener('click', () => { nextOutfit(); startOutfitsAutoplay(); });
+
+const outfitsCarouselEl = document.getElementById('outfitsCarousel');
+outfitsCarouselEl.addEventListener('mouseenter', stopOutfitsAutoplay);
+outfitsCarouselEl.addEventListener('mouseleave', () => { if(document.getElementById('outfits').style.display !== 'none') startOutfitsAutoplay(); });
+
+// swipe support (mobile)
+let touchStartX = null;
+outfitsCarouselEl.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].clientX; stopOutfitsAutoplay(); }, { passive: true });
+outfitsCarouselEl.addEventListener('touchend', (e) => {
+  if(touchStartX === null) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if(Math.abs(dx) > 40){ dx < 0 ? nextOutfit() : prevOutfit(); }
+  touchStartX = null;
+  startOutfitsAutoplay();
+}, { passive: true });
+
 loadProducts();
+loadOutfits();
 </script>
 </body>
 </html>

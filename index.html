@@ -894,7 +894,7 @@ async function loadProducts(){
     return;
   }
   try{
-    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CONFIG.SHEET_NAME)}`;
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CONFIG.SHEET_NAME)}&headers=1`;
     const res = await fetch(url);
     if(!res.ok) throw new Error('No se pudo leer la hoja (' + res.status + ')');
     const text = await res.text();
@@ -1069,7 +1069,7 @@ let outfitsTimer = null;
 async function loadOutfits(){
   if(!CONFIG.SHEET_ID) return;
   try{
-    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CONFIG.OUTFITS_SHEET_NAME || 'Outfits')}`;
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CONFIG.OUTFITS_SHEET_NAME || 'Outfits')}&headers=1`;
     const res = await fetch(url);
     if(!res.ok) throw new Error('No se pudo leer la hoja de Outfits (' + res.status + ')');
     const text = await res.text();

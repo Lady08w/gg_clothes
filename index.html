@@ -640,14 +640,6 @@
   @media (max-width:600px){
     .wa-float{ right:16px; bottom:16px; width:54px; height:54px; }
     .wa-float svg{ width:27px; height:27px; }
-
-    .grid{ grid-template-columns:repeat(2, 1fr); gap:12px; }
-    .card-body{ padding:10px 12px 12px; gap:3px; }
-    .card-brand{ font-size:10px; letter-spacing:1px; }
-    .card-name{ font-size:13px; }
-    .card-size{ font-size:10.5px; padding:2px 7px; }
-    .price-old{ font-size:10.5px; }
-    .card-price{ font-size:13px; }
   }
 </style>
 </head>
@@ -665,11 +657,12 @@
     <div class="nav-inner">
       <div class="nav-logo"></div>
       <div class="nav-cats" id="navCats">
+        <!-- Los botones de categoría (Ropa, Calzado, Gorras, etc.) ya NO se escriben
+             a mano aquí: se generan solos según lo que encuentre en la columna
+             "Categoria" de la Google Sheet. "Todos" y "Outfits" son fijos y se
+             regeneran también desde JS (ver renderCatButtons) — esto es solo el
+             estado inicial antes de que cargue la hoja. -->
         <button class="cat-btn active" data-cat="Todos">Todos</button>
-        <button class="cat-btn" data-cat="Ropa">Ropa</button>
-        <button class="cat-btn" data-cat="Calzado">Calzado</button>
-        <button class="cat-btn" data-cat="Accesorios">Accesorios</button>
-        <button class="cat-btn" data-cat="Otros">Otros</button>
         <button class="cat-btn" data-cat="Outfits">Outfits</button>
       </div>
       <div class="search-wrap">
@@ -926,7 +919,36 @@ function currentList(){
   });
 }
 
+// Genera los botones de categoría a partir de lo que haya en la columna "Categoria"
+// de los productos cargados desde la Google Sheet. Así, para agregar una categoría
+// nueva (por ejemplo "Gorras") solo hay que escribirla en esa columna de la hoja —
+// el botón aparece solo, sin tocar este archivo. "Todos" y "Outfits" son fijos.
+function renderCatButtons(){
+  const seen = new Set();
+  const cats = [];
+  PRODUCTS.forEach(p => {
+    const c = (p.categoria || '').trim();
+    if(!c) return;
+    const key = c.toLowerCase();
+    if(key === 'todos' || key === 'outfits') return; // nombres reservados, no se duplican
+    if(!seen.has(key)){ seen.add(key); cats.push(c); }
+  });
+  cats.sort((a, b) => a.localeCompare(b, 'es'));
+
+  // Si la categoría activa ya no existe en la hoja (se borró o se renombró), volvemos a "Todos".
+  if(ACTIVE_CAT !== 'Todos' && !cats.includes(ACTIVE_CAT)) ACTIVE_CAT = 'Todos';
+
+  const order = ['Todos', ...cats, 'Outfits'];
+  const nav = document.getElementById('navCats');
+  const outfitsShowing = document.getElementById('outfits').style.display !== 'none';
+  nav.innerHTML = order.map(cat => {
+    const isActive = cat === 'Outfits' ? outfitsShowing : (!outfitsShowing && cat === ACTIVE_CAT);
+    return `<button class="cat-btn${isActive ? ' active' : ''}" data-cat="${cat}">${cat}</button>`;
+  }).join('');
+}
+
 function render(){
+  renderCatButtons();
   const list = currentList();
   const grid = document.getElementById('grid');
   const empty = document.getElementById('emptyState');

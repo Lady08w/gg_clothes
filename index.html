@@ -588,6 +588,27 @@
     color:var(--text-dim);
   }
 
+  .modal-buy-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:18px;
+    padding:14px 20px;
+    border-radius:999px;
+    background:#25D366;
+    color:#0b0b0d;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:0.4px;
+    text-decoration:none;
+    box-shadow:0 4px 18px rgba(37,211,102,0.25);
+    transition:transform .2s ease, box-shadow .2s ease;
+  }
+  .modal-buy-btn:hover{ transform:translateY(-2px); box-shadow:0 6px 22px rgba(37,211,102,0.35); }
+  .modal-buy-btn svg{ width:20px; height:20px; flex:none; }
+
   footer{
     text-align:center;
     padding:36px 20px 50px;
@@ -725,6 +746,12 @@
         <div class="modal-name" id="modalName"></div>
         <div class="modal-price" id="modalPrice"></div>
         <div class="modal-tags" id="modalTags"></div>
+        <a href="#" id="modalBuyBtn" class="modal-buy-btn" target="_blank" rel="noopener">
+          <svg viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16.004 3C9.377 3 4 8.373 4 15c0 2.386.66 4.63 1.86 6.57L4 29l7.62-1.83A11.94 11.94 0 0 0 16.004 27C22.63 27 28 21.627 28 15S22.63 3 16.004 3zm0 21.8a9.76 9.76 0 0 1-4.98-1.36l-.357-.212-4.522 1.086 1.107-4.41-.233-.37A9.74 9.74 0 0 1 5.2 15c0-5.965 4.84-10.8 10.804-10.8 5.963 0 10.796 4.835 10.796 10.8 0 5.964-4.833 10.8-10.796 10.8zm5.93-8.09c-.324-.163-1.917-.947-2.214-1.056-.297-.108-.513-.162-.73.163-.216.324-.837 1.055-1.026 1.272-.19.216-.378.243-.702.081-.324-.162-1.37-.505-2.61-1.61-.964-.86-1.615-1.923-1.804-2.247-.19-.324-.02-.5.142-.662.146-.145.324-.378.486-.567.163-.19.216-.324.324-.54.108-.216.054-.406-.027-.568-.081-.163-.73-1.76-1-2.41-.263-.633-.53-.548-.73-.558l-.622-.011c-.216 0-.567.081-.864.406-.297.324-1.134 1.108-1.134 2.703 0 1.595 1.161 3.136 1.323 3.353.163.216 2.286 3.49 5.54 4.895.774.334 1.377.534 1.848.683.776.247 1.483.212 2.042.129.623-.093 1.917-.784 2.187-1.542.27-.757.27-1.406.19-1.542-.081-.135-.297-.216-.622-.379z"/>
+          </svg>
+          Comprar por WhatsApp
+        </a>
       </div>
     </div>
   </div>
@@ -752,6 +779,9 @@ const CONFIG = {
   WHATSAPP_NUMBER: '573143693205',                 // <-- número de WhatsApp, solo dígitos, con código de país (sin +, sin espacios)
   WHATSAPP_MESSAGE: 'Hola! Vi el catálogo de GG Clothing y quiero más información 🙂',
   OUTFITS_SHEET_NAME: 'Outfits',                   // <-- nombre de la pestaña de fotos de outfits
+  // Mensaje que se manda al hacer clic en "Comprar por WhatsApp" dentro de la ficha de una prenda.
+  // {producto} y {link} se reemplazan automáticamente por el nombre de la prenda y su link directo.
+  WHATSAPP_PRODUCT_MESSAGE: 'Hola! Estoy interesad@ en comprar esta prenda: {producto} — {link} ¿Sigue disponible?',
 };
 
 // Datos de ejemplo usados solo si CONFIG.SHEET_ID está vacío o falla la conexión.
@@ -880,9 +910,42 @@ function formatPrice(n){
   return '$' + Number(n||0).toLocaleString('es-CO');
 }
 
+// Convierte texto a un "slug" simple (sin tildes, minúsculas, separado por guiones) para armar
+// el link directo de cada prenda, ej: "Nike Croptop Full" -> "nike-croptop-full".
+function slugify(s){
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+// Le da a cada producto un id estable (para el link directo #producto-...) según su marca y
+// nombre; el índice al final evita choques si dos prendas quedan con el mismo nombre.
+function withIds(list){
+  return list.map((p, i) => ({ ...p, id: (slugify(p.marca + '-' + p.producto) || 'prenda') + '-' + i }));
+}
+
+// Arma la URL completa (sin el #) de la página del catálogo, para pegarla en el link de cada prenda.
+function baseUrl(){
+  return location.href.split('#')[0];
+}
+
 let PRODUCTS = [];
 let ACTIVE_CAT = 'Todos';
 let GALLERY = { photos: [], index: 0 };
+let DEEP_LINK_CHECKED = false;
+
+// Si la URL trae "#producto-<id>" (por ejemplo porque alguien abrió el link de "Comprar"),
+// abre esa ficha automáticamente apenas cargan los productos. Solo se hace una vez.
+function maybeOpenFromHash(){
+  if(DEEP_LINK_CHECKED) return;
+  DEEP_LINK_CHECKED = true;
+  const m = location.hash.match(/^#producto-(.+)$/);
+  if(!m) return;
+  const p = PRODUCTS.find(pr => pr.id === decodeURIComponent(m[1]));
+  if(p) openModal(p);
+}
 
 function showBanner(html){
   document.getElementById('configBannerText').innerHTML = html;
@@ -892,14 +955,16 @@ function showBanner(html){
 async function loadProducts(){
   if(!CONFIG.SHEET_ID){
     showBanner('⚠ El catálogo aún no está conectado a una Google Sheet — estás viendo datos de ejemplo. Configura <code>CONFIG.SHEET_ID</code> al final de <code>index.html</code>. Ver <code>README.md</code>.');
-    PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    PRODUCTS = withIds(SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok'));
     render();
+    maybeOpenFromHash();
     return;
   }
   if(location.protocol === 'file:'){
     showBanner('⚠ Estás abriendo este archivo directamente desde tu computador (doble clic). Por seguridad, el navegador bloquea que una página abierta así pida datos a Google — por eso ves datos de ejemplo y no las fotos reales. Sube la carpeta a <a href="https://app.netlify.com/drop" target="_blank" rel="noopener">Netlify Drop</a> (gratis, sin cuenta) y ábrelo desde el link que te dé — ahí sí se conecta en vivo con la Google Sheet.');
-    PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    PRODUCTS = withIds(SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok'));
     render();
+    maybeOpenFromHash();
     return;
   }
   try{
@@ -908,13 +973,15 @@ async function loadProducts(){
     if(!res.ok) throw new Error('No se pudo leer la hoja (' + res.status + ')');
     const text = await res.text();
     const rows = parseGvizJson(text).map(normalizeRow);
-    PRODUCTS = rows.filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    PRODUCTS = withIds(rows.filter(p => String(p.publicar).trim().toLowerCase() === 'ok'));
     render();
+    maybeOpenFromHash();
   }catch(err){
     console.error('Error cargando Google Sheet, usando datos de ejemplo:', err);
     showBanner('⚠ No se pudo leer la Google Sheet configurada (revisa que esté compartida como "Cualquiera con el enlace: Lector" y que el ID/nombre de pestaña en <code>CONFIG</code> sean correctos). Mientras tanto, estás viendo datos de ejemplo.');
-    PRODUCTS = SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok');
+    PRODUCTS = withIds(SAMPLE_DATA.map(normalizeRow).filter(p => String(p.publicar).trim().toLowerCase() === 'ok'));
     render();
+    maybeOpenFromHash();
   }
 }
 
@@ -1018,6 +1085,23 @@ function openModal(p){
     tags.appendChild(el);
   });
   renderGallery();
+
+  // Link directo a esta prenda (para compartir y para el botón de WhatsApp) + actualiza la URL
+  // para que se pueda copiar y compartir el link tal cual, sin recargar la página.
+  const productLink = baseUrl() + '#producto-' + p.id;
+  history.replaceState(null, '', productLink);
+
+  const buyBtn = document.getElementById('modalBuyBtn');
+  if(CONFIG.WHATSAPP_NUMBER){
+    const digits = String(CONFIG.WHATSAPP_NUMBER).replace(/\D/g, '');
+    const template = CONFIG.WHATSAPP_PRODUCT_MESSAGE || 'Estoy interesad@ en comprar esta prenda: {producto} — {link}';
+    const message = template.replace('{producto}', p.producto || '').replace('{link}', productLink);
+    buyBtn.href = `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+    buyBtn.style.display = 'flex';
+  } else {
+    buyBtn.style.display = 'none';
+  }
+
   document.getElementById('modalBackdrop').classList.add('open');
 }
 
@@ -1062,6 +1146,9 @@ document.addEventListener('keydown', (e) => {
 });
 function closeModal(){
   document.getElementById('modalBackdrop').classList.remove('open');
+  if(/^#producto-/.test(location.hash)){
+    history.replaceState(null, '', baseUrl());
+  }
 }
 
 document.getElementById('navCats').addEventListener('click', (e) => {

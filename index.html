@@ -783,7 +783,7 @@
       nombre exacto de la pestaña (por defecto "Inventario").
    ============================================================ */
 const CONFIG = {
-  SHEET_ID: '1uVF2wyc8jz8YKa0eKhOp4BtF4ni7toHA',  // <-- pega aquí el ID de tu Google Sheet
+  SHEET_ID: '1ZHPj9w7SKTA27rWqnrXM3oJk7DiM1QS1ocLX9JbJcKw',  // <-- pega aquí el ID de tu Google Sheet
   SHEET_NAME: 'Inventario',                        // <-- nombre de la pestaña
   WHATSAPP_NUMBER: '573143693205',                 // <-- número de WhatsApp, solo dígitos, con código de país (sin +, sin espacios)
   WHATSAPP_MESSAGE: 'Hola! Vi el catálogo de GG Clothing y quiero más información 🙂',
@@ -893,7 +893,7 @@ function normalizeRow(raw){
   return {
     publicar: raw['Publicar'],
     marca: raw['Marca'] || '',
-    producto: raw['Producto'] || '',
+    producto: raw['Producto'] || raw['Descripción'] || '',
     categoria: raw['Categoria'] || 'Otros',
     tipo: raw['Tipo'] || '',
     condicion: raw['Condicion'] || '',
